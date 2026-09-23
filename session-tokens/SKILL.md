@@ -25,6 +25,7 @@ Pass the user's argument through unchanged:
 | `last` | The most recent *other* session in this project that made API calls |
 | `<session-id>` or a unique prefix | That session, in any project |
 | `--project [--since YYYY-MM-DD]` | Every session in this project, plus a per-session table |
+| `--top N` | Agents listed before the rest roll into one row (default 25 with `--project`; `0` = all) |
 | `--json` | Same data as JSON, if you need to compute something the tables don't show |
 
 It needs only the Python standard library and reads only local files under
@@ -47,10 +48,14 @@ Pick the ones that are actually true of this report:
   (Sonnet, Haiku) did most of the calls but the main thread's model dominates
   cost, say so: that is the orchestrator's context being re-read every turn.
 - **Cache behaviour.** A cache hit rate above ~90% is normal for Claude Code.
-  Cache reads usually make up most of the tokens but not most of the cost, so
-  don't present the raw token total as "consumption" without that context. A low
-  hit rate or large cache writes point to context being rebuilt (compaction,
-  model switch, long idle gaps beyond the cache TTL).
+  Cache reads are nearly all the tokens, so never present the raw token total as
+  "consumption". Use the "Cost by token type" line instead: cache reads are
+  cheap per token but can still be the largest share of cost in long sessions,
+  because the whole context is re-read on every turn. When they dominate, the
+  lever is shorter-lived context (fresh sessions per task, delegating reading to
+  subagents), not fewer output tokens. A low hit rate or large cache writes
+  point to context being rebuilt (compaction, model switch, idle gaps beyond the
+  cache TTL).
 - **Thinking.** Its share of output, and whether it tracks the effort level.
 - **Effort.** Which levels ran where. Haiku does not support effort, so its calls
   show `n/a`; that is expected, not missing data.

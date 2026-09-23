@@ -37,6 +37,7 @@ In any Claude Code session:
 | `/session-tokens <session-id>` | A specific session; a unique prefix of the id is enough |
 | `/session-tokens --project` | Every session in the current project, plus a per-session table |
 | `/session-tokens --project --since 2026-09-01` | Project sessions active on or after that date |
+| `/session-tokens --project --top 10` | Same, listing the 10 costliest agents and rolling the rest into one row (default 25 with `--project`; `0` lists all) |
 
 You can also just ask — *"how many tokens did this session use?"*, *"what did
 the subagents cost?"*, *"which models and effort levels ran today?"* — and
@@ -77,10 +78,11 @@ session:
 - Cache hit rate: 99% of input tokens served from cache
 - Thinking: 21% of output tokens
 - Subagents: 44% of estimated cost
+- Cost by token type: cache reads 72%, cache writes 19%, output 9%, fresh input 0%
 
 ### By model   — opus-5 174 calls $57.71 · sonnet-5 1222 calls $45.53
 ### By effort  — one row per effort level (Haiku shows n/a: it has no effort setting)
-### By agent   — main session, then each subagent with its type, task description and model
+### By agent   — main session(s), then each subagent with its type, task description and model
 ### By skill   — which skill or slash command was active when each call was made
 ```
 
@@ -88,7 +90,7 @@ session:
 |---|---|
 | **Input** | Fresh, uncached input tokens |
 | **Cache write** | Context written to the prompt cache (5-minute and 1-hour TTL combined; priced separately) |
-| **Cache read** | Context re-read from cache on each turn — usually most of the tokens, but a small share of the cost |
+| **Cache read** | Context re-read from cache on each turn. Nearly all the tokens, and cheap per token, but in long sessions often the largest share of cost — see the "Cost by token type" line |
 | **Output** | Generated tokens, thinking included |
 | **…of which thinking** | The part of Output spent on reasoning |
 | **Est. cost** | API-list-price estimate for that row |

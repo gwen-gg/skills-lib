@@ -262,7 +262,7 @@ def duration(first, last):
     return f"{mins // 60}h {mins % 60:02d}m" if mins >= 60 else f"{mins}m"
 
 
-def render(r):
+def render(r, top=None):
     t = r["total"]
     by_cost = lambda d: sorted(d.items(), key=lambda kv: (-kv[1]["cost"], -kv[1]["calls"]))
     all_in = t["input"] + t["cache_write_5m"] + t["cache_write_1h"] + t["cache_read"]
@@ -284,6 +284,18 @@ def render(r):
         f"- **Thinking:** {pct(t['thinking'], t['output'])} of output tokens",
         f"- **Subagents:** {pct(sub_cost, t['cost'])} of estimated cost",
     ]
+    split = defaultdict(float)
+    for model, b in r["by_model"].items():
+        p = price_for(model)
+        if p:
+            split["cache reads"] += b["cache_read"] * p[2] / 1e6
+            split["cache writes"] += (b["cache_write_5m"] * 1.25 + b["cache_write_1h"] * 2.0) * p[0] / 1e6
+            split["output"] += b["output"] * p[1] / 1e6
+            split["fresh input"] += b["input"] * p[0] / 1e6
+    base = sum(split.values())
+    if base:
+        headline.append("- **Cost by token type** (before any fast-mode premium): " + ", ".join(
+            f"{k} {pct(v, base)}" for k, v in sorted(split.items(), key=lambda kv: -kv[1])))
     if r["fast_calls"]:
         headline.append(f"- **Fast mode:** {r['fast_calls']} call(s), priced at the fast-mode premium")
     out += headline + [""]
@@ -293,12 +305,22 @@ def render(r):
 
     src_rows = []
     for key, s in by_cost(r["by_source"]):
-        label = s["agent_type"] if s["kind"] == "main" else f"{s['agent_type']} ({key})"
+        if s["kind"] == "main":
+            label = s["agent_type"] + (f" ({key.split(':')[0]})" if ":" in key else "")
+        else:
+            label = f"{s['agent_type']} ({key})"
         if s["description"]:
             label += f" — {s['description']}"
         label += f" · {', '.join(m.removeprefix('claude-') for m in s['models'])}"
         src_rows.append((label.replace("|", "/"), s))
-    out.append(table("By agent", "Agent", src_rows))
+    if top and len(src_rows) > top:
+        rest = empty()
+        for _, s in src_rows[top:]:
+            for k in rest:
+                rest[k] += s[k]
+        src_rows = src_rows[:top] + [(f"… {len(src_rows) - top} more agents", rest)]
+    out.append(table("By agent" + (f" (top {top} by cost)" if top and len(r["by_source"]) > top else ""),
+                     "Agent", src_rows))
 
     out.append(table("By skill", "Skill", by_cost(r["by_skill"])))
 
@@ -317,6 +339,8 @@ def main():
     ap.add_argument("--project", action="store_true", help="aggregate every session in this project")
     ap.add_argument("--since", help="with --project: only sessions active on/after YYYY-MM-DD")
     ap.add_argument("--json", action="store_true", help="emit JSON instead of markdown")
+    ap.add_argument("--top", type=int, help="agents to list before rolling the rest into one row "
+                    "(default: 25 with --project, all otherwise; 0 = all)")
     a = ap.parse_args()
 
     current = os.environ.get("CLAUDE_CODE_SESSION_ID")
@@ -350,7 +374,8 @@ def main():
         sys.exit("no sessions matched")
 
     r = analyse(paths)
-    print(json.dumps(r, indent=2, default=str) if a.json else render(r))
+    top = a.top if a.top is not None else (25 if a.project else 0)
+    print(json.dumps(r, indent=2, default=str) if a.json else render(r, top))
 
 
 if __name__ == "__main__":
